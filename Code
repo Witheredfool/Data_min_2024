@@ -1,1 +1,318 @@
+import pandas as pd
+import seaborn as sb
+import matplotlib.pyplot as mp
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.metrics import classification_report
+from sklearn.model_selection import KFold
+from sklearn.model_selection import cross_val_score
+from sklearn.tree import plot_tree
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve, auc
+import matplotlib.pyplot as plt
+import numpy as np
+
+#Initial dataset
+file_path = 'C:/Users/dbell/Downloads/mushroom.csv.zip'
+data = pd.read_csv(file_path, encoding='utf-8')
+
+
+#data visuals
+# Attributes to include in the bar graph
+attributes = [
+    "cap-shape", "cap-surface", "cap-color", "does-bruise-or-bleed",
+    "gill-attachment", "gill-spacing", "gill-color",
+    "stem-root", "stem-surface", "stem-color",
+    "veil-type", "veil-color", "has-ring",
+    "ring-type", "spore-print-color", "habitat", "season"
+]
+
+# Filter attributes that exist in the dataset
+available_attributes = [attr for attr in attributes if attr in data.columns]
+
+# Plot setup for grouped bar chart of mushroom attributes 
+plt.figure(figsize=(15, 8))
+x_positions = []
+x_labels = []
+current_x = 0
+
+
+for attribute in available_attributes:
+    counts = data[attribute].value_counts()
+    categories = counts.index
+    frequencies = counts.values
+    
+    
+    bar_positions = np.arange(current_x, current_x + len(categories))
+    plt.bar(bar_positions, frequencies, label=attribute)
+    
+    
+    x_positions.extend(bar_positions)
+    x_labels.extend(categories)
+    
+    
+    current_x += len(categories) + 1
+
+
+plt.xticks(x_positions, x_labels, rotation=90)
+plt.title("Grouped Bar Chart of Mushroom Attributes")
+plt.xlabel("Categories (Grouped by Attribute)")
+plt.ylabel("Frequency")
+plt.legend(title="Attributes", loc="upper right")
+plt.tight_layout()
+plt.show()
+
+# Create histograms for numerical data
+plt.figure(figsize=(15, 5))
+
+# Cap-diameter histogram
+plt.subplot(1, 3, 1)
+plt.hist(data['cap-diameter'], bins=20, color='blue', alpha=0.7)
+plt.title('Cap-diameter Distribution')
+plt.xlabel('Cap-diameter')
+plt.ylabel('Frequency')
+
+# Stem-height histogram
+plt.subplot(1, 3, 2)
+plt.hist(data['stem-height'], bins=20, color='green', alpha=0.7)
+plt.title('Stem-height Distribution')
+plt.xlabel('Stem-height')
+plt.ylabel('Frequency')
+
+# Stem-width histogram
+plt.subplot(1, 3, 3)
+plt.hist(data['stem-width'], bins=20, color='orange', alpha=0.7)
+plt.title('Stem-width Distribution')
+plt.xlabel('Stem-width')
+plt.ylabel('Frequency')
+
+# Show the histograms
+plt.tight_layout()
+plt.show()
+
+
+
+
+#Cleaning and Quality checking
+print(f"Number of rows before filtering: {data.shape[0]}")
+print(f"Number of duplicate rows: {data.duplicated().sum()}")
+data_sample = data.drop_duplicates()
+
+print("\nUnique values per column:")
+print(data_sample.nunique())
+
+print()
+
+
+
+
+#chose to remove veil type column based on its vagueness (only has one unique value)
+if "veil-type" in data_sample.columns:
+    data_sample = data_sample.drop(columns=["veil-type"])
+
+print("Filling missing values...")
+data_sample = data_sample.fillna("missing")
+
+
+
+
+# Encode all categorical data
+encoder = LabelEncoder()
+for column in data_sample.columns:
+    if data_sample[column].dtype == 'object':
+        data_sample[column] = encoder.fit_transform(data_sample[column])
+
+
+
+
+
+#Corr heatmap
+corr_matrix = data_sample.corr(numeric_only=True)
+target_corr = corr_matrix['class'].sort_values(ascending=False)
+top_10 = target_corr.index[1:11]
+
+filtered_corr = corr_matrix.loc[top_10,top_10]
+
+plt.figure(figsize=(8,6))
+
+dataplot = sb.heatmap(filtered_corr,cmap="YlGnBu",annot=True)
+plt.title('Top 10 features that correlate to the target')
+plt.show()
+
+dataplot = sb.heatmap(data_sample.corr(numeric_only=True))
+mp.show()
+
+
+print(f"Number of rows after removing duplicates and obvious outliers: {data_sample.shape[0]}")
+print()
+
+
+
+
+
+
+
+
+#Define x and y from data_sample
+y = data_sample['class']
+X = data_sample.drop(columns=['class'])
+print(f"X Shape: {X.shape}, y shape: {y.shape}")
+
+
+
+#20% test size
+print("Splitting data into train and test sets.")
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+#Normalize both the training data and the test data
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+
+
+
+
+
+
+
+#Testing accuracies after training
+#K-Nearest Neighbor
+print("Testing KNN...")
+knn_model = KNeighborsClassifier(n_neighbors=5)
+knn_model.fit(X_train_scaled, y_train)
+y_pred_knn = knn_model.predict(X_test_scaled)
+knn_accuracy = accuracy_score(y_test, y_pred_knn)
+print(f"KNN Accuracy: {knn_accuracy}")
+
+print()
+print()
+
+#Support vector machine
+print("Testing SVM...")
+svm_model = SVC(kernel='linear', probability=True, random_state=42)
+svm_model.fit(X_train_scaled, y_train)
+y_pred_svm = svm_model.predict(X_test_scaled)
+svm_accuracy = accuracy_score(y_test, y_pred_svm)
+print(f"SVM Accuracy: {svm_accuracy}")
+print()
+print()
+
+#Decision Tree
+print("Testing Decision Tree...")
+dt_model = DecisionTreeClassifier(random_state=42)
+dt_model.fit(X_train, y_train)
+y_pred_dt = dt_model.predict(X_test)
+dt_accuracy = accuracy_score(y_test, y_pred_dt)
+print(f"Decision Tree Accuracy: {dt_accuracy}")
+print()
+print()
+
+#Random Forest
+print("Testing Random Forest...")
+rf_model = RandomForestClassifier(n_estimators=50, random_state=42, n_jobs=-1)
+rf_model.fit(X_train, y_train)
+y_pred_rf = rf_model.predict(X_test)
+rf_accuracy = accuracy_score(y_test, y_pred_rf)
+print(f"Random Forest Accuracy: {rf_accuracy}")
+print()
+print()
+
+
+#CV Section
+model_classes = {
+    "Random Forest": RandomForestClassifier,
+    "KNN": KNeighborsClassifier,
+    "SVM": SVC,
+    "Decision Tree": DecisionTreeClassifier,
+}
+
+
+models = {
+    "Random Forest": RandomForestClassifier(n_estimators=50, random_state=42, n_jobs=-1),
+    "KNN": KNeighborsClassifier(n_neighbors=5),
+    "SVM": SVC(kernel="linear", probability=True, random_state=42),
+    "Decision Tree": DecisionTreeClassifier(random_state=42),
+}
+
+
+for model_name, model in models.items():
+    print(f"\nPerforming Cross-Validation for {model_name}...")
+    
+    
+    if model_name in ["KNN", "SVM"]:
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X_test)
+        scores = cross_val_score(model, X_scaled, y_test, cv=5)
+    else:
+        scores = cross_val_score(model, X_test, y_test, cv=5)
+    
+    print(f"{model_name} - Testing Mean Accuracy: {scores.mean():.2f}, Std Dev: {scores.std():.2f}")
+
+
+#Confusion Matrices
+models = {
+    "Random Forest": rf_model,
+    "KNN": knn_model,
+    "SVM": svm_model,
+    "Decision Tree": dt_model,
+}
+
+
+for model_name, model in models.items():
+    if model_name in ["KNN", "SVM"]:
+        X_test_input = X_test_scaled
+    else:
+        X_test_input = X_test
+    
+    
+    y_pred = model.predict(X_test_input)
+    
+    
+    cm = confusion_matrix(y_test, y_pred)
+    
+    # Plot the confusion matrix
+    print(f"Confusion Matrix for {model_name}:")
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=model.classes_)
+    disp.plot(cmap="Blues", values_format="d")
+    plt.title(f"{model_name} Confusion Matrix")
+    plt.show(block=False)
+
+    print(f"Classification Report for {model_name}: ")
+    print(classification_report(y_test, y_pred))
+
+# ROC and AUC curve stuff
+plt.figure(figsize=(10, 5))
+
+for model_name, model in models.items():
+    if model_name in ["KNN", "SVM"]:  #Scaling still required, same used as in the cross validation section
+        X_test_input = X_test_scaled
+    else:
+        X_test_input = X_test
+    
+    if hasattr(model, "predict_proba"):
+        y_pred_prob = model.predict_proba(X_test_input)[:, 1]
+    else:
+        y_pred_prob = model.decision_function(X_test_input)
+        y_pred_prob = (y_pred_prob - y_pred_prob.min()) / (y_pred_prob.max() - y_pred_prob.min())
+
+    fpr, tpr, _ = roc_curve(y_test, y_pred_prob)
+    roc_auc = auc(fpr, tpr)
+    
+    plt.plot(fpr, tpr, lw=2, label=f"{model_name} (AUC = {roc_auc:.2f})")
+
+
+plt.plot([0, 1], [0, 1], color="black", lw=2, linestyle="--", label="Random Guess")
+
+# Finalize the plot
+plt.xlabel("FPR")
+plt.ylabel("TPR")
+plt.title("ROC Curve Comparison")
+plt.legend(loc="lower right")
+plt.grid(alpha=0.5)
+plt.show(block=False)
 
